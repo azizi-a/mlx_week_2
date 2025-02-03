@@ -1,5 +1,8 @@
 import torch
 from torch.utils.data import DataLoader
+from models.two_tower_model import TwoTowerModel
+from utils.text_processor import TextProcessor
+from data.data_loader import TextMatchingDataset
 
 def train_model(documents, queries, labels, config, device='cuda'):
     # Initialize processor and process data
@@ -32,7 +35,11 @@ def train_model(documents, queries, labels, config, device='cuda'):
                 batch['document'].to(device),
                 batch['query'].to(device)
             )
-            loss = criterion(similarity, batch['label'].float().to(device))
+            # Reshape the label tensor to match similarity matrix dimensions
+            batch_labels = batch['label'].float().view(-1, 1).to(device)
+            # Only take the diagonal elements of the similarity matrix
+            similarity = torch.diagonal(similarity).view(-1, 1)
+            loss = criterion(similarity, batch_labels)
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
