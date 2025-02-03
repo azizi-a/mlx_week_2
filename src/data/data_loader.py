@@ -1,7 +1,7 @@
 import torch
 import json
 from pathlib import Path
-# from datasets import load_dataset
+from datasets import load_dataset
 
 class TextMatchingDataset(torch.utils.data.Dataset):
     def __init__(self, documents, queries, labels):
@@ -19,7 +19,7 @@ class TextMatchingDataset(torch.utils.data.Dataset):
             'label': self.labels[idx]
         } 
 
-def load_sample_data(data_path):
+def load_sample_data(data_path = ''):
     """Load sample data from a JSON file or use the MS MARCO dataset."""
     if data_path and Path(data_path).exists():
         with open(data_path) as f:
@@ -30,8 +30,8 @@ def load_sample_data(data_path):
         ds = load_dataset("microsoft/ms_marco", "v1.1")
         
         # Get a small sample of documents and queries
-        documents = ds['train']['passages'][:5]  # First 5 passages
-        queries = ds['train']['query'][:5]  # First 5 queries
+        documents = [str(doc) for doc in ds['train']['passages'][:5]]  # Convert to strings
+        queries = [str(query) for query in ds['train']['query'][:5]]  # Convert to strings
         
         # Create simple binary labels (1 for positive match, 0 otherwise)
         labels = [[1 if i == j else 0 for j in range(5)] for i in range(5)]
