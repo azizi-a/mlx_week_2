@@ -1,7 +1,7 @@
 import torch
 from train import train_model
 from inference import search
-from data.data_loader import load_sample_data, flatten_data
+from data.data_loader import load_sample_data, flatten_queries_and_documents
 from pathlib import Path
 
 def main():
@@ -20,13 +20,15 @@ def main():
     print(f"Using device: {device}")
 
     # Load sample data
-    documents, queries, labels = load_sample_data("data/sample_data.json")
-
-    # Flatten labels for training
-    flat_documents, flat_queries, flat_labels = flatten_data(documents, queries, labels)
+    training_dataset, _validation_dataset, _test_dataset = load_sample_data(100)
+    queries, documents, labels = flatten_queries_and_documents(training_dataset)
+    
+    print(f"Number of documents: {len(documents)}")
+    print(f"Number of queries: {len(queries)}")
+    print(f"Number of labels: {len(labels)}")
 
     print("Training model...")
-    model, processor = train_model(flat_documents, flat_queries, flat_labels, config, device)
+    model, processor = train_model(queries, documents, labels, config, device)
 
     # Save model and processor
     save_dir = Path("saved_models")

@@ -1,6 +1,4 @@
 import torch
-import json
-from pathlib import Path
 from datasets import load_dataset
 
 class TextMatchingDataset(torch.utils.data.Dataset):
@@ -19,35 +17,42 @@ class TextMatchingDataset(torch.utils.data.Dataset):
             'label': self.labels[idx]
         } 
 
-def load_sample_data(data_path = ''):
-    """Load sample data from a JSON file or use the MS MARCO dataset."""
-    if data_path and Path(data_path).exists():
-        with open(data_path) as f:
-            data = json.load(f)
-            return data['documents'], data['queries'], data['labels']
-    else:
-        # Load MS MARCO dataset
-        ds = load_dataset("microsoft/ms_marco", "v1.1")
-        
-        # Get a small sample of documents and queries
-        documents = [str(doc) for doc in ds['train']['passages'][:10]]  # Convert to strings
-        queries = [str(query) for query in ds['train']['query'][:10]]  # Convert to strings
-        
-        # Create simple binary labels (1 for positive match, 0 otherwise)
-        labels = [[1 if i == j else 0 for j in range(10)] for i in range(10)]
-        
-        return documents, queries, labels
+def load_sample_data(sample_size):
+    """Load sample data from MS MARCO dataset."""
+    # Load MS MARCO dataset
+    ds = load_dataset("microsoft/ms_marco", "v1.1")
+    
+    train_data = ds['train']
+    validation_data = ds['validation']
+    test_data = ds['test']
+    
+    # Return data sets
+    return train_data[:sample_size], validation_data[:sample_size], test_data[:sample_size] 
 
-def flatten_data(documents, queries, labels):
-    """Flatten the documents, queries, and labels for training."""
-    flat_documents = []
+def flatten_queries_and_documents(dataset):
+    """
+    Flattens queries and documents from a MS MARCO dataset into simple lists.
+    
+    Args:
+        dataset: MS MARCO dataset split containing queries and passages
+        
+    Returns:
+        queries: List of query strings
+        documents: List of document strings
+        labels: List of binary labels indicating if document matches query
+    """
     flat_queries = []
+    flat_documents = []
     flat_labels = []
     
-    for i, query in enumerate(queries):
-        for j, doc in enumerate(documents):
+    for i, query in enumerate(dataset['query']):
+        passages = dataset['passages'][i]['passage_text']
+        is_selected = dataset['passages'][i]['is_selected']
+        
+        # Add each passage as a separate document
+        for doc, label in zip(passages, is_selected):
             flat_queries.append(query)
             flat_documents.append(doc)
-            flat_labels.append(labels[i][j])
+            flat_labels.append(label)
             
-    return flat_documents, flat_queries, flat_labels 
+    return flat_queries, flat_documents, flat_labels
