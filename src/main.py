@@ -12,7 +12,8 @@ def main():
         'hidden_dim': 64,
         'batch_size': 512,
         'epochs': 10,
-        'learning_rate': 0.001
+        'learning_rate': 0.001,
+        'margin': 0.3
     }
 
     # Set device

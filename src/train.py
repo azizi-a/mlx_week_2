@@ -4,7 +4,7 @@ from models.two_tower_model import TwoTowerModel
 from utils.text_processor import TextProcessor
 from data.data_loader import TextMatchingDataset
 
-def triplet_loss_function(query_embeddings, positive_doc_embeddings, negative_doc_embeddings, margin=0.5):
+def triplet_loss_function(query_embeddings, positive_doc_embeddings, negative_doc_embeddings, margin):
     """
     Compute triplet loss between query, positive and negative document embeddings.
     
@@ -92,7 +92,8 @@ def train_model(train_data,
             loss = triplet_loss_function(
                 query_embeddings,
                 positive_doc_embeddings, 
-                negative_doc_embeddings
+                negative_doc_embeddings,
+                config['margin']
             )
             loss.backward()
             optimizer.step()
@@ -125,7 +126,8 @@ def train_model(train_data,
                 loss = triplet_loss_function(
                     query_embeddings,
                     positive_doc_embeddings, 
-                    negative_doc_embeddings
+                    negative_doc_embeddings,
+                    config['margin']
                 )
                 total_val_loss += loss.item()
         
