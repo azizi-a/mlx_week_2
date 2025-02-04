@@ -13,7 +13,8 @@ def main():
         'batch_size': 512,
         'epochs': 10,
         'learning_rate': 0.001,
-        'margin': 0.3
+        'margin': 0.3,
+        'sample_size': 100_000
     }
 
     # Set device
@@ -21,7 +22,7 @@ def main():
     print(f"Using device: {device}")
 
     # Load sample data
-    training_dataset, validation_dataset, _test_dataset = load_sample_data(100)
+    training_dataset, validation_dataset, _test_dataset = load_sample_data(config['sample_size'])
     train_data = flatten_queries_and_documents(training_dataset)
     val_data = flatten_queries_and_documents(validation_dataset)
     

@@ -3,6 +3,7 @@ from torch.utils.data import DataLoader
 from models.two_tower_model import TwoTowerModel
 from utils.text_processor import TextProcessor
 from data.data_loader import TextMatchingDataset
+from tqdm import tqdm
 
 def triplet_loss_function(query_embeddings, positive_doc_embeddings, negative_doc_embeddings, margin):
     """
@@ -67,7 +68,9 @@ def train_model(train_data,
         # Training phase
         model.train()
         total_train_loss = 0
-        for batch in train_loader:
+        train_pbar = tqdm(train_loader, desc=f'Training Epoch {epoch+1}/{config["epochs"]}')
+        
+        for batch_idx, batch in enumerate(train_pbar):
             optimizer.zero_grad()
             
             # Get embeddings for queries and positive documents
@@ -98,14 +101,17 @@ def train_model(train_data,
             loss.backward()
             optimizer.step()
             total_train_loss += loss.item()
+            train_pbar.set_postfix({'loss': f'{loss.item():.4f}'})
         
         avg_train_loss = total_train_loss / len(train_loader)
         
         # Validation phase
         model.eval()
         total_val_loss = 0
+        val_pbar = tqdm(val_loader, desc=f'Validation Epoch {epoch+1}/{config["epochs"]}')
+        
         with torch.no_grad():
-            for batch in val_loader:
+            for batch_idx, batch in enumerate(val_pbar):
                 query_embeddings = model.get_embeddings(
                     batch['query'].to(device),
                     model_type='query'
@@ -130,10 +136,11 @@ def train_model(train_data,
                     config['margin']
                 )
                 total_val_loss += loss.item()
+                val_pbar.set_postfix({'loss': f'{loss.item():.4f}'})
         
         avg_val_loss = total_val_loss / len(val_loader)
         
-        print(f"Epoch {epoch+1}/{config['epochs']} - "
+        print(f"\nEpoch {epoch+1}/{config['epochs']} Summary - "
               f"Train Loss: {avg_train_loss:.4f} - "
               f"Val Loss: {avg_val_loss:.4f}")
         
