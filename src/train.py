@@ -23,7 +23,6 @@ def train_model(documents, queries, labels, config, device='cuda'):
     ).to(device)
     
     optimizer = torch.optim.Adam(model.parameters(), lr=config['learning_rate'])
-    criterion = torch.nn.BCEWithLogitsLoss()
     
     # Training loop
     model.train()
@@ -31,15 +30,29 @@ def train_model(documents, queries, labels, config, device='cuda'):
         total_loss = 0
         for batch in dataloader:
             optimizer.zero_grad()
-            similarity = model(
-                batch['document'].to(device),
-                batch['query'].to(device)
+            # Get embeddings for queries and positive documents
+            query_embeddings = model.get_embeddings(
+                batch['query'].to(device),
+                is_query=True
             )
-            # Reshape the label tensor to match similarity matrix dimensions
-            batch_labels = batch['label'].float().view(-1, 1).to(device)
-            # Only take the diagonal elements of the similarity matrix
-            similarity = torch.diagonal(similarity).view(-1, 1)
-            loss = criterion(similarity, batch_labels)
+            positive_doc_embeddings = model.get_embeddings(
+                batch['document'].to(device), 
+                is_query=False
+            )
+            
+            # Create negative examples by shuffling the documents
+            negative_docs = batch['document'].roll(shifts=1, dims=0)
+            negative_doc_embeddings = model.get_embeddings(
+                negative_docs.to(device),
+                is_query=False
+            )
+
+            # Calculate triplet loss
+            loss = triplet_loss_function(
+                query_embeddings,
+                positive_doc_embeddings, 
+                negative_doc_embeddings
+            )
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
@@ -62,3 +75,30 @@ def search(model, processor, query, documents, top_k=5, device='cuda'):
         similarities = torch.matmul(query_emb, doc_emb.t()).cpu().numpy().flatten()
         top_idx = similarities.argsort()[-top_k:][::-1]
         return [(documents[i], similarities[i]) for i in top_idx] 
+        
+
+def triplet_loss_function(query_embeddings, positive_doc_embeddings, negative_doc_embeddings, margin=1.0):
+    """
+    Compute triplet loss between query, positive and negative document embeddings.
+    
+    Args:
+        query_embeddings: Tensor of query embeddings
+        positive_doc_embeddings: Tensor of positive document embeddings 
+        negative_doc_embeddings: Tensor of negative document embeddings
+        margin: Minimum margin between positive and negative distances
+        
+    Returns:
+        loss: Triplet loss value
+    """
+    # Calculate cosine similarities
+    positive_similarity = torch.cosine_similarity(query_embeddings, positive_doc_embeddings)
+    negative_similarity = torch.cosine_similarity(query_embeddings, negative_doc_embeddings)
+    
+    # Convert similarities to distances (1 - similarity)
+    positive_distance = 1 - positive_similarity 
+    negative_distance = 1 - negative_similarity
+    
+    # Compute triplet loss
+    loss = torch.clamp(positive_distance - negative_distance + margin, min=0)
+    
+    return loss.mean()

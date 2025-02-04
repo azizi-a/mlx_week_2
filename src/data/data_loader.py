@@ -30,11 +30,11 @@ def load_sample_data(data_path = ''):
         ds = load_dataset("microsoft/ms_marco", "v1.1")
         
         # Get a small sample of documents and queries
-        documents = [str(doc) for doc in ds['train']['passages'][:5]]  # Convert to strings
-        queries = [str(query) for query in ds['train']['query'][:5]]  # Convert to strings
+        documents = [str(doc) for doc in ds['train']['passages'][:10]]  # Convert to strings
+        queries = [str(query) for query in ds['train']['query'][:10]]  # Convert to strings
         
         # Create simple binary labels (1 for positive match, 0 otherwise)
-        labels = [[1 if i == j else 0 for j in range(5)] for i in range(5)]
+        labels = [[1 if i == j else 0 for j in range(10)] for i in range(10)]
         
         return documents, queries, labels
 
