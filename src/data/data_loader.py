@@ -55,4 +55,8 @@ def flatten_queries_and_documents(dataset):
             flat_documents.append(doc)
             flat_labels.append(label)
             
-    return flat_queries, flat_documents, flat_labels
+    return {
+        'queries': flat_queries,
+        'documents': flat_documents,
+        'labels': flat_labels
+    }

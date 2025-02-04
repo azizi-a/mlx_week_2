@@ -7,10 +7,10 @@ from pathlib import Path
 def main():
     # Configuration
     config = {
-        'max_length': 200,
+        'max_length': 512,
         'embed_dim': 128,
         'hidden_dim': 64,
-        'batch_size': 32,
+        'batch_size': 512,
         'epochs': 10,
         'learning_rate': 0.001
     }
@@ -20,15 +20,20 @@ def main():
     print(f"Using device: {device}")
 
     # Load sample data
-    training_dataset, _validation_dataset, _test_dataset = load_sample_data(100)
-    queries, documents, labels = flatten_queries_and_documents(training_dataset)
+    training_dataset, validation_dataset, _test_dataset = load_sample_data(100)
+    train_data = flatten_queries_and_documents(training_dataset)
+    val_data = flatten_queries_and_documents(validation_dataset)
     
-    print(f"Number of documents: {len(documents)}")
-    print(f"Number of queries: {len(queries)}")
-    print(f"Number of labels: {len(labels)}")
+    print(f"Number of training documents: {len(train_data['documents'])}")
+    print(f"Number of training queries: {len(train_data['queries'])}")
+    print(f"Number of validation documents: {len(val_data['documents'])}")
 
     print("Training model...")
-    model, processor = train_model(queries, documents, labels, config, device)
+    model, processor = train_model( 
+        train_data,
+        val_data,
+        config, device
+    )
 
     # Save model and processor
     save_dir = Path("saved_models")
@@ -47,10 +52,11 @@ def main():
 
     for query in test_queries:
         print(f"\nQuery: {query}")
-        results = search(model, processor, query, documents, top_k=2, device=device)
+        results = search(model, processor, query, train_data['documents'], top_k=5, device=device)
         print("Top 2 matching documents:")
         for doc, score in results:
-            doc_preview = ' '.join(doc.split()[:80])
+            doc_preview = ' '.join(doc.split()[:20])
+            print('-'*100)
             print(f"Score: {score:.4f} | Document: {doc_preview}...")
 
 if __name__ == "__main__":
