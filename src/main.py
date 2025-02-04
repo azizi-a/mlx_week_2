@@ -1,5 +1,6 @@
 import torch
-from train import train_model, search
+from train import train_model
+from inference import search
 from data.data_loader import load_sample_data, flatten_data
 from pathlib import Path
 
@@ -47,7 +48,8 @@ def main():
         results = search(model, processor, query, documents, top_k=2, device=device)
         print("Top 2 matching documents:")
         for doc, score in results:
-            print(f"Score: {score:.4f} | Document: {doc}")
+            doc_preview = ' '.join(doc.split()[:80])
+            print(f"Score: {score:.4f} | Document: {doc_preview}...")
 
 if __name__ == "__main__":
     main() 

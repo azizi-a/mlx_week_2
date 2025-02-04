@@ -14,5 +14,5 @@ class TwoTowerModel(nn.Module):
         query_embeddings = self.query_tower(queries)
         return torch.matmul(query_embeddings, doc_embeddings.t())
     
-    def get_embeddings(self, x, is_query=True):
-        return self.query_tower(x) if is_query else self.document_tower(x) 
+    def get_embeddings(self, x, model_type='query'):
+        return self.query_tower(x) if model_type == 'query' else self.document_tower(x)
