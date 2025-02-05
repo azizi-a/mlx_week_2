@@ -18,11 +18,11 @@ def search(model, processor, query, documents, top_k=5, device='cuda'):
     model.eval()
     with torch.no_grad():
         query_emb = model.get_embeddings(
-            processor.transform([query]).to(device),
+            processor.encode_text([query]).to(device),
             model_type = 'query'
         )
         doc_emb = model.get_embeddings(
-            processor.transform(documents).to(device),
+            processor.encode_text(documents).to(device),
             model_type = 'document'
         )
         similarities = torch.matmul(query_emb, doc_emb.t()).cpu().numpy().flatten()
