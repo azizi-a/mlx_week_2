@@ -49,13 +49,6 @@ def train_model(train_data,
     val_doc_sequences = processor.encode_text(val_data['documents'])
     val_query_sequences = processor.encode_text(val_data['queries'])
     
-    # Create dataloaders
-    train_dataset = TextMatchingDataset(train_doc_sequences, train_query_sequences, torch.tensor(train_data['labels']))
-    train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True)
-    
-    val_dataset = TextMatchingDataset(val_doc_sequences, val_query_sequences, torch.tensor(val_data['labels']))
-    val_loader = DataLoader(val_dataset, batch_size=config['batch_size'])
-    
     # Initialize model with pretrained embeddings
     model = TwoTowerModel(
         vocab_size=processor.vocab_size(),
@@ -63,6 +56,31 @@ def train_model(train_data,
         hidden_dim=config['hidden_dim'],
         pretrained_embeddings=pretrained_embeddings
     ).to(device)
+    
+    # Pre-compute all document embeddings for both training and validation sets
+    model.eval()
+    with torch.no_grad():
+        train_doc_embeddings = model.get_embeddings(
+            train_doc_sequences.to(device),
+            model_type='document'
+        )
+        val_doc_embeddings = model.get_embeddings(
+            val_doc_sequences.to(device),
+            model_type='document'
+        )
+    
+    # Create dataloaders for queries only
+    train_dataset = torch.utils.data.TensorDataset(
+        train_query_sequences,
+        torch.arange(len(train_query_sequences))  # indices for positive docs
+    )
+    train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True)
+    
+    val_dataset = torch.utils.data.TensorDataset(
+        val_query_sequences,
+        torch.arange(len(val_query_sequences))
+    )
+    val_loader = DataLoader(val_dataset, batch_size=config['batch_size'])
     
     optimizer = torch.optim.Adam(model.parameters(), lr=config['learning_rate'])
     
@@ -76,31 +94,33 @@ def train_model(train_data,
         total_train_loss = 0
         train_pbar = tqdm(train_loader, desc=f'Training Epoch {epoch+1}/{config["epochs"]}')
         
-        for batch_idx, batch in enumerate(train_pbar):
+        for batch_idx, (queries, pos_indices) in enumerate(train_pbar):
             optimizer.zero_grad()
             
-            # Get embeddings for queries and positive documents
-            queries = batch['query'].to(device)
+            queries = queries.to(device)
+            pos_indices = pos_indices.to(device)
             query_embeddings = model.get_embeddings(
                 queries,
                 model_type='query'
             )
-
-            positive_docs = batch['document'].to(device)
-            positive_doc_embeddings = model.get_embeddings(
-                positive_docs, 
-                model_type='document'
-            )
             
-            # Create negative examples by randomly permuting the document indices
+            # Get positive document embeddings using indices
+            positive_doc_embeddings = train_doc_embeddings[pos_indices]
+            
+            # Create negative examples for each query using config parameter
             batch_size = queries.size(0)
-            perm = torch.randperm(batch_size)
-            negative_docs = positive_docs[perm]
-            negative_doc_embeddings = model.get_embeddings(
-                negative_docs,
-                model_type='document'
+            neg_indices = torch.randint(
+                0, 
+                len(train_doc_embeddings), 
+                (batch_size * config['num_negative_examples'],), 
+                device=device
             )
-
+            negative_doc_embeddings = train_doc_embeddings[neg_indices]
+            
+            # Reshape query and positive embeddings to match negative samples
+            query_embeddings = query_embeddings.repeat_interleave(config['num_negative_examples'], dim=0)
+            positive_doc_embeddings = positive_doc_embeddings.repeat_interleave(config['num_negative_examples'], dim=0)
+            
             # Calculate triplet loss
             loss = triplet_loss_function(
                 query_embeddings,
@@ -108,7 +128,7 @@ def train_model(train_data,
                 negative_doc_embeddings,
                 config['margin']
             )
-
+            
             # Backward pass and optimization
             loss.backward()
             optimizer.step()
@@ -126,27 +146,30 @@ def train_model(train_data,
         val_pbar = tqdm(val_loader, desc=f'Validation Epoch {epoch+1}/{config["epochs"]}')
         
         with torch.no_grad():
-            for batch_idx, batch in enumerate(val_pbar):
-                queries = batch['query'].to(device)
+            for batch_idx, (queries, pos_indices) in enumerate(val_pbar):
+                queries = queries.to(device)
+                pos_indices = pos_indices.to(device)
                 query_embeddings = model.get_embeddings(
                     queries,
                     model_type='query'
                 )
-
-                positive_docs = batch['document'].to(device)
-                positive_doc_embeddings = model.get_embeddings(
-                    positive_docs, 
-                    model_type='document'
-                )
                 
+                positive_doc_embeddings = val_doc_embeddings[pos_indices]
+                
+                # Create negative examples for each query using config parameter
                 batch_size = queries.size(0)
-                perm = torch.randperm(batch_size)
-                negative_docs = positive_docs[perm]
-                negative_doc_embeddings = model.get_embeddings(
-                    negative_docs,
-                    model_type='document'
+                neg_indices = torch.randint(
+                    0, 
+                    len(val_doc_embeddings), 
+                    (batch_size * config['num_negative_examples'],), 
+                    device=device
                 )
-
+                negative_doc_embeddings = val_doc_embeddings[neg_indices]
+                
+                # Reshape query and positive embeddings to match negative samples
+                query_embeddings = query_embeddings.repeat_interleave(config['num_negative_examples'], dim=0)
+                positive_doc_embeddings = positive_doc_embeddings.repeat_interleave(config['num_negative_examples'], dim=0)
+                
                 loss = triplet_loss_function(
                     query_embeddings,
                     positive_doc_embeddings, 

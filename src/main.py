@@ -14,6 +14,7 @@ def main():
         'epochs': 10,
         'learning_rate': 0.001,
         'margin': 0.3,
+        'num_negative_examples': 3,
         'sample_size': 150_000,
         # Word2Vec configuration
         'word2vec': {
