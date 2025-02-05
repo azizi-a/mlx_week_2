@@ -127,6 +127,19 @@ def validate(model, val_loader, val_doc_embeddings, config, device):
     
     return total_val_loss / len(val_loader)
 
+def compute_doc_embeddings(model, doc_sequences, batch_size, device):
+    """Compute document embeddings in batches to avoid memory issues"""
+    model.eval()
+    embeddings_list = []
+    
+    with torch.no_grad():
+        for i in range(0, len(doc_sequences), batch_size):
+            batch = doc_sequences[i:i + batch_size].to(device)
+            batch_embeddings = model.get_embeddings(batch, model_type='document')
+            embeddings_list.append(batch_embeddings.cpu())  # Move to CPU to free GPU memory
+    
+    return torch.cat(embeddings_list, dim=0).to(device)
+
 def train_model(train_data, val_data, config, device='cuda'):
     # Initialize processor and process data
     processor = TextProcessor(vector_size=config['embed_dim'], word2vec_params=config['word2vec'])
@@ -149,17 +162,20 @@ def train_model(train_data, val_data, config, device='cuda'):
         pretrained_embeddings=pretrained_embeddings
     ).to(device)
     
-    # Pre-compute all document embeddings for both training and validation sets
-    model.eval()
-    with torch.no_grad():
-        train_doc_embeddings = model.get_embeddings(
-            train_doc_sequences.to(device),
-            model_type='document'
-        )
-        val_doc_embeddings = model.get_embeddings(
-            val_doc_sequences.to(device),
-            model_type='document'
-        )
+    # Pre-compute all document embeddings for both training and validation sets in batches
+    print("Computing document embeddings...")
+    train_doc_embeddings = compute_doc_embeddings(
+        model, 
+        train_doc_sequences, 
+        config['batch_size'],
+        device
+    )
+    val_doc_embeddings = compute_doc_embeddings(
+        model, 
+        val_doc_sequences, 
+        config['batch_size'],
+        device
+    )
     
     # Create dataloaders for queries only
     train_dataset = torch.utils.data.TensorDataset(
