@@ -14,7 +14,14 @@ def main():
         'epochs': 10,
         'learning_rate': 0.001,
         'margin': 0.3,
-        'sample_size': 100_000
+        'sample_size': 150_000,
+        # Word2Vec configuration
+        'word2vec': {
+            'window': 5,
+            'min_count': 4,
+            'workers': 4,
+            'epochs': 5
+        }
     }
 
     # Set device

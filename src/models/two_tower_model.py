@@ -4,10 +4,13 @@ from .document_tower import DocumentTower
 from .query_tower import QueryTower
 
 class TwoTowerModel(nn.Module):
-    def __init__(self, vocab_size: int, embed_dim: int = 128, hidden_dim: int = 64):
+    def __init__(self, vocab_size: int, embed_dim: int = 128, hidden_dim: int = 64,
+                 pretrained_embeddings=None):
         super().__init__()
-        self.document_tower = DocumentTower(vocab_size, embed_dim, hidden_dim)
-        self.query_tower = QueryTower(vocab_size, embed_dim, hidden_dim)
+        self.document_tower = DocumentTower(vocab_size, embed_dim, hidden_dim,
+                                          pretrained_embeddings)
+        self.query_tower = QueryTower(vocab_size, embed_dim, hidden_dim,
+                                    pretrained_embeddings)
         
     def forward(self, documents, queries):
         doc_embeddings = self.document_tower(documents)

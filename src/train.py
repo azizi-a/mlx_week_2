@@ -37,8 +37,11 @@ def train_model(train_data,
                 val_data,
                 config, device='cuda'):
     # Initialize processor and process data
-    processor = TextProcessor()
+    processor = TextProcessor(vector_size=config['embed_dim'], word2vec_params=config['word2vec'])
     processor.build_vocab(train_data['documents'] + train_data['queries'])
+    
+    # Get pretrained embeddings
+    pretrained_embeddings = processor.get_embedding_weights()
     
     # Process training and validation data
     train_doc_sequences = processor.encode_text(train_data['documents'])
@@ -53,11 +56,12 @@ def train_model(train_data,
     val_dataset = TextMatchingDataset(val_doc_sequences, val_query_sequences, torch.tensor(val_data['labels']))
     val_loader = DataLoader(val_dataset, batch_size=config['batch_size'])
     
-    # Initialize model
+    # Initialize model with pretrained embeddings
     model = TwoTowerModel(
         vocab_size=processor.vocab_size(),
         embed_dim=config['embed_dim'],
-        hidden_dim=config['hidden_dim']
+        hidden_dim=config['hidden_dim'],
+        pretrained_embeddings=pretrained_embeddings
     ).to(device)
     
     optimizer = torch.optim.Adam(model.parameters(), lr=config['learning_rate'])
