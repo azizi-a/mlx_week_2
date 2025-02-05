@@ -33,9 +33,101 @@ def triplet_loss_function(query_embedding, positive_doc_embedding, negative_doc_
     
     return loss.mean()
 
-def train_model(train_data,
-                val_data,
-                config, device='cuda'):
+def train_epoch(model, train_loader, train_doc_embeddings, optimizer, config, device):
+    """Run one epoch of training"""
+    model.train()
+    total_train_loss = 0
+    train_pbar = tqdm(train_loader, desc=f'Training')
+    
+    for batch_idx, (queries, pos_indices) in enumerate(train_pbar):
+        optimizer.zero_grad()
+        
+        queries = queries.to(device)
+        pos_indices = pos_indices.to(device)
+        query_embeddings = model.get_embeddings(
+            queries,
+            model_type='query'
+        )
+        
+        # Get positive document embeddings using indices
+        positive_doc_embeddings = train_doc_embeddings[pos_indices]
+        
+        # Create negative examples for each query using config parameter
+        batch_size = queries.size(0)
+        neg_indices = torch.randint(
+            0, 
+            len(train_doc_embeddings), 
+            (batch_size * config['num_negative_examples'],), 
+            device=device
+        )
+        negative_doc_embeddings = train_doc_embeddings[neg_indices]
+        
+        # Reshape query and positive embeddings to match negative samples
+        query_embeddings = query_embeddings.repeat_interleave(config['num_negative_examples'], dim=0)
+        positive_doc_embeddings = positive_doc_embeddings.repeat_interleave(config['num_negative_examples'], dim=0)
+        
+        # Calculate triplet loss
+        loss = triplet_loss_function(
+            query_embeddings,
+            positive_doc_embeddings, 
+            negative_doc_embeddings,
+            config['margin']
+        )
+        
+        # Backward pass and optimization
+        loss.backward()
+        optimizer.step()
+        total_train_loss += loss.item()
+        train_pbar.set_postfix({'loss': f'{loss.item():.4f}'})
+        
+        # Log batch loss to wandb
+        wandb.log({"batch_train_loss": loss.item()})
+    
+    return total_train_loss / len(train_loader)
+
+def validate(model, val_loader, val_doc_embeddings, config, device):
+    """Run validation"""
+    model.eval()
+    total_val_loss = 0
+    val_pbar = tqdm(val_loader, desc=f'Validation')
+    
+    with torch.no_grad():
+        for batch_idx, (queries, pos_indices) in enumerate(val_pbar):
+            queries = queries.to(device)
+            pos_indices = pos_indices.to(device)
+            query_embeddings = model.get_embeddings(
+                queries,
+                model_type='query'
+            )
+            
+            positive_doc_embeddings = val_doc_embeddings[pos_indices]
+            
+            # Create negative examples for each query using config parameter
+            batch_size = queries.size(0)
+            neg_indices = torch.randint(
+                0, 
+                len(val_doc_embeddings), 
+                (batch_size * config['num_negative_examples'],), 
+                device=device
+            )
+            negative_doc_embeddings = val_doc_embeddings[neg_indices]
+            
+            # Reshape query and positive embeddings to match negative samples
+            query_embeddings = query_embeddings.repeat_interleave(config['num_negative_examples'], dim=0)
+            positive_doc_embeddings = positive_doc_embeddings.repeat_interleave(config['num_negative_examples'], dim=0)
+            
+            loss = triplet_loss_function(
+                query_embeddings,
+                positive_doc_embeddings, 
+                negative_doc_embeddings,
+                config['margin']
+            )
+            total_val_loss += loss.item()
+            val_pbar.set_postfix({'loss': f'{loss.item():.4f}'})
+    
+    return total_val_loss / len(val_loader)
+
+def train_model(train_data, val_data, config, device='cuda'):
     # Initialize processor and process data
     processor = TextProcessor(vector_size=config['embed_dim'], word2vec_params=config['word2vec'])
     processor.build_vocab(train_data['documents'] + train_data['queries'])
@@ -90,96 +182,10 @@ def train_model(train_data,
     # Training loop
     for epoch in range(config['epochs']):
         # Training phase
-        model.train()
-        total_train_loss = 0
-        train_pbar = tqdm(train_loader, desc=f'Training Epoch {epoch+1}/{config["epochs"]}')
-        
-        for batch_idx, (queries, pos_indices) in enumerate(train_pbar):
-            optimizer.zero_grad()
-            
-            queries = queries.to(device)
-            pos_indices = pos_indices.to(device)
-            query_embeddings = model.get_embeddings(
-                queries,
-                model_type='query'
-            )
-            
-            # Get positive document embeddings using indices
-            positive_doc_embeddings = train_doc_embeddings[pos_indices]
-            
-            # Create negative examples for each query using config parameter
-            batch_size = queries.size(0)
-            neg_indices = torch.randint(
-                0, 
-                len(train_doc_embeddings), 
-                (batch_size * config['num_negative_examples'],), 
-                device=device
-            )
-            negative_doc_embeddings = train_doc_embeddings[neg_indices]
-            
-            # Reshape query and positive embeddings to match negative samples
-            query_embeddings = query_embeddings.repeat_interleave(config['num_negative_examples'], dim=0)
-            positive_doc_embeddings = positive_doc_embeddings.repeat_interleave(config['num_negative_examples'], dim=0)
-            
-            # Calculate triplet loss
-            loss = triplet_loss_function(
-                query_embeddings,
-                positive_doc_embeddings, 
-                negative_doc_embeddings,
-                config['margin']
-            )
-            
-            # Backward pass and optimization
-            loss.backward()
-            optimizer.step()
-            total_train_loss += loss.item()
-            train_pbar.set_postfix({'loss': f'{loss.item():.4f}'})
-            
-            # Log batch loss to wandb
-            wandb.log({"batch_train_loss": loss.item()})
-        
-        avg_train_loss = total_train_loss / len(train_loader)
+        avg_train_loss = train_epoch(model, train_loader, train_doc_embeddings, optimizer, config, device)
         
         # Validation phase
-        model.eval()
-        total_val_loss = 0
-        val_pbar = tqdm(val_loader, desc=f'Validation Epoch {epoch+1}/{config["epochs"]}')
-        
-        with torch.no_grad():
-            for batch_idx, (queries, pos_indices) in enumerate(val_pbar):
-                queries = queries.to(device)
-                pos_indices = pos_indices.to(device)
-                query_embeddings = model.get_embeddings(
-                    queries,
-                    model_type='query'
-                )
-                
-                positive_doc_embeddings = val_doc_embeddings[pos_indices]
-                
-                # Create negative examples for each query using config parameter
-                batch_size = queries.size(0)
-                neg_indices = torch.randint(
-                    0, 
-                    len(val_doc_embeddings), 
-                    (batch_size * config['num_negative_examples'],), 
-                    device=device
-                )
-                negative_doc_embeddings = val_doc_embeddings[neg_indices]
-                
-                # Reshape query and positive embeddings to match negative samples
-                query_embeddings = query_embeddings.repeat_interleave(config['num_negative_examples'], dim=0)
-                positive_doc_embeddings = positive_doc_embeddings.repeat_interleave(config['num_negative_examples'], dim=0)
-                
-                loss = triplet_loss_function(
-                    query_embeddings,
-                    positive_doc_embeddings, 
-                    negative_doc_embeddings,
-                    config['margin']
-                )
-                total_val_loss += loss.item()
-                val_pbar.set_postfix({'loss': f'{loss.item():.4f}'})
-        
-        avg_val_loss = total_val_loss / len(val_loader)
+        avg_val_loss = validate(model, val_loader, val_doc_embeddings, config, device)
         
         # Log epoch metrics to wandb
         wandb.log({
