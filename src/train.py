@@ -1,4 +1,5 @@
 import torch
+import wandb
 from torch.utils.data import DataLoader
 from models.two_tower_model import TwoTowerModel
 from utils.text_processor import TextProcessor
@@ -109,6 +110,9 @@ def train_model(train_data,
             optimizer.step()
             total_train_loss += loss.item()
             train_pbar.set_postfix({'loss': f'{loss.item():.4f}'})
+            
+            # Log batch loss to wandb
+            wandb.log({"batch_train_loss": loss.item()})
         
         avg_train_loss = total_train_loss / len(train_loader)
         
@@ -131,7 +135,6 @@ def train_model(train_data,
                     model_type='document'
                 )
                 
-                # Use the same permutation approach for validation
                 batch_size = queries.size(0)
                 perm = torch.randperm(batch_size)
                 negative_docs = positive_docs[perm]
@@ -150,6 +153,13 @@ def train_model(train_data,
                 val_pbar.set_postfix({'loss': f'{loss.item():.4f}'})
         
         avg_val_loss = total_val_loss / len(val_loader)
+        
+        # Log epoch metrics to wandb
+        wandb.log({
+            "epoch": epoch + 1,
+            "train_loss": avg_train_loss,
+            "val_loss": avg_val_loss
+        })
         
         print(f"\nEpoch {epoch+1}/{config['epochs']} Summary - "
               f"Train Loss: {avg_train_loss:.4f} - "

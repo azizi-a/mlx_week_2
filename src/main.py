@@ -1,4 +1,5 @@
 import torch
+import wandb
 from train import train_model
 from inference import search
 from data.data_loader import load_sample_data, flatten_queries_and_documents
@@ -30,6 +31,10 @@ def main():
     print(f"Number of validation documents: {len(val_data['documents'])}")
 
     print("Training model...")
+    wandb.init(
+        project="two_tower_search",
+        config=config
+    )
     model, processor = train_model( 
         train_data,
         val_data,
@@ -59,6 +64,8 @@ def main():
             doc_preview = ' '.join(doc.split()[:20])
             print('-'*100)
             print(f"Score: {score:.4f} | Document: {doc_preview}...")
+
+    wandb.finish()
 
 if __name__ == "__main__":
     main() 
