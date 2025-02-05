@@ -7,7 +7,6 @@ from pathlib import Path
 def main():
     # Configuration
     config = {
-        'max_length': 512,
         'embed_dim': 128,
         'hidden_dim': 64,
         'batch_size': 512,

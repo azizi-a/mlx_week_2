@@ -5,7 +5,7 @@ from utils.text_processor import TextProcessor
 from data.data_loader import TextMatchingDataset
 from tqdm import tqdm
 
-def triplet_loss_function(query_embeddings, positive_doc_embeddings, negative_doc_embeddings, margin):
+def triplet_loss_function(query_embedding, positive_doc_embedding, negative_doc_embedding, margin):
     """
     Compute triplet loss between query, positive and negative document embeddings.
     
@@ -18,16 +18,17 @@ def triplet_loss_function(query_embeddings, positive_doc_embeddings, negative_do
     Returns:
         loss: Triplet loss value
     """
+    # Normalize embeddings to ensure cosine similarity calculations are correct
+    query_embedding = torch.nn.functional.normalize(query_embedding, p=2, dim=1)
+    positive_doc_embedding = torch.nn.functional.normalize(positive_doc_embedding, p=2, dim=1)
+    negative_doc_embedding = torch.nn.functional.normalize(negative_doc_embedding, p=2, dim=1)
+    
     # Calculate cosine similarities
-    positive_similarity = torch.cosine_similarity(query_embeddings, positive_doc_embeddings)
-    negative_similarity = torch.cosine_similarity(query_embeddings, negative_doc_embeddings)
+    positive_similarity = torch.cosine_similarity(query_embedding, positive_doc_embedding)
+    negative_similarity = torch.cosine_similarity(query_embedding, negative_doc_embedding)
     
-    # Convert similarities to distances (1 - similarity)
-    positive_case_distance = 1 - positive_similarity 
-    negative_case_distance = 1 - negative_similarity
-    
-    # Compute triplet loss
-    loss = torch.clamp(positive_case_distance - negative_case_distance + margin, min=0)
+    # Calculate loss
+    loss = torch.relu(positive_similarity - negative_similarity + margin)
     
     return loss.mean()
 
@@ -35,14 +36,14 @@ def train_model(train_data,
                 val_data,
                 config, device='cuda'):
     # Initialize processor and process data
-    processor = TextProcessor(max_length=config['max_length'])
-    processor.fit(train_data['documents'] + train_data['queries'])
+    processor = TextProcessor()
+    processor.build_vocab(train_data['documents'] + train_data['queries'])
     
     # Process training and validation data
-    train_doc_sequences = processor.transform(train_data['documents'])
-    train_query_sequences = processor.transform(train_data['queries'])
-    val_doc_sequences = processor.transform(val_data['documents'])
-    val_query_sequences = processor.transform(val_data['queries'])
+    train_doc_sequences = processor.encode_text(train_data['documents'])
+    train_query_sequences = processor.encode_text(train_data['queries'])
+    val_doc_sequences = processor.encode_text(val_data['documents'])
+    val_query_sequences = processor.encode_text(val_data['queries'])
     
     # Create dataloaders
     train_dataset = TextMatchingDataset(train_doc_sequences, train_query_sequences, torch.tensor(train_data['labels']))
@@ -74,20 +75,24 @@ def train_model(train_data,
             optimizer.zero_grad()
             
             # Get embeddings for queries and positive documents
+            queries = batch['query'].to(device)
             query_embeddings = model.get_embeddings(
-                batch['query'].to(device),
+                queries,
                 model_type='query'
             )
+
+            positive_docs = batch['document'].to(device)
             positive_doc_embeddings = model.get_embeddings(
-                batch['document'].to(device), 
+                positive_docs, 
                 model_type='document'
             )
             
-            # Create negative examples by shuffling the documents
-            shift_amount = torch.randint(10, 10000, (1,)).item()
-            negative_docs = batch['document'].roll(shifts=shift_amount, dims=0)
+            # Create negative examples by randomly permuting the document indices
+            batch_size = queries.size(0)
+            perm = torch.randperm(batch_size)
+            negative_docs = positive_docs[perm]
             negative_doc_embeddings = model.get_embeddings(
-                negative_docs.to(device),
+                negative_docs,
                 model_type='document'
             )
 
@@ -98,6 +103,8 @@ def train_model(train_data,
                 negative_doc_embeddings,
                 config['margin']
             )
+
+            # Backward pass and optimization
             loss.backward()
             optimizer.step()
             total_train_loss += loss.item()
@@ -112,23 +119,27 @@ def train_model(train_data,
         
         with torch.no_grad():
             for batch_idx, batch in enumerate(val_pbar):
+                queries = batch['query'].to(device)
                 query_embeddings = model.get_embeddings(
-                    batch['query'].to(device),
+                    queries,
                     model_type='query'
                 )
+
+                positive_docs = batch['document'].to(device)
                 positive_doc_embeddings = model.get_embeddings(
-                    batch['document'].to(device), 
+                    positive_docs, 
                     model_type='document'
                 )
                 
-                # Create negative examples for validation
-                shift_amount = torch.randint(10, 10000, (1,)).item()
-                negative_docs = batch['document'].roll(shifts=shift_amount, dims=0)
+                # Use the same permutation approach for validation
+                batch_size = queries.size(0)
+                perm = torch.randperm(batch_size)
+                negative_docs = positive_docs[perm]
                 negative_doc_embeddings = model.get_embeddings(
-                    negative_docs.to(device),
+                    negative_docs,
                     model_type='document'
                 )
-                
+
                 loss = triplet_loss_function(
                     query_embeddings,
                     positive_doc_embeddings, 
