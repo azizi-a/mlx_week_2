@@ -10,6 +10,7 @@ class TextProcessor:
         self.vocab = None
         self.word_to_idx = None
         self.word2vec_params = word2vec_params
+        self.encoding_cache = {}  # Add cache dictionary
         
     def build_vocab(self, texts, use_text8=True):
         # Train or load cached Word2Vec model
@@ -58,4 +59,20 @@ class TextProcessor:
         return torch.stack([torch.tensor(seq) for seq in padded])
     
     def vocab_size(self):
-        return len(self.vocab) 
+        return len(self.vocab)
+    
+    def encode_text_with_cache(self, texts, cache_key=None):
+        """Encode texts with caching support"""
+        if cache_key and cache_key in self.encoding_cache:
+            return self.encoding_cache[cache_key]
+            
+        encoded = self.encode_text(texts)
+        
+        if cache_key:
+            self.encoding_cache[cache_key] = encoded
+            
+        return encoded
+        
+    def clear_cache(self):
+        """Clear the encoding cache"""
+        self.encoding_cache = {} 

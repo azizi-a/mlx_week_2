@@ -172,12 +172,24 @@ def train_model(train_data, val_data, config, device='cuda'):
     
     # Process training and validation data with caching
     print("Processing training data...")
-    train_doc_sequences = processor.encode_text(train_data['documents'])
-    train_query_sequences = processor.encode_text(train_data['queries'])
+    train_doc_sequences = processor.encode_text_with_cache(
+        train_data['documents'], 
+        cache_key='train_docs'
+    )
+    train_query_sequences = processor.encode_text_with_cache(
+        train_data['queries'],
+        cache_key='train_queries'
+    )
     
     print("Processing validation data...")
-    val_doc_sequences = processor.encode_text(val_data['documents'])
-    val_query_sequences = processor.encode_text(val_data['queries'])
+    val_doc_sequences = processor.encode_text_with_cache(
+        val_data['documents'],
+        cache_key='val_docs'
+    )
+    val_query_sequences = processor.encode_text_with_cache(
+        val_data['queries'],
+        cache_key='val_queries'
+    )
     
     # Initialize model with pretrained embeddings
     model = TwoTowerModel(

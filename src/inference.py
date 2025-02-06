@@ -18,24 +18,26 @@ def search(model, processor, query, documents, top_k=5, device='cuda', batch_siz
     """
     model.eval()
     with torch.no_grad():
-        # Process query once
+        # Process query
         query_emb = model.get_embeddings(
-            processor.encode_text([query]).to(device),
+            processor.encode_text_with_cache([query], cache_key=f'query_{query}').to(device),
             model_type='query'
         )
         
-        # Process documents in batches
+        # Process documents with caching
+        doc_encodings = processor.encode_text_with_cache(
+            documents,
+            cache_key='search_documents'
+        )
+        
+        # Process in batches
         all_similarities = []
         for i in range(0, len(documents), batch_size):
-            batch_docs = documents[i:i + batch_size]
-            doc_emb = model.get_embeddings(
-                processor.encode_text(batch_docs).to(device),
-                model_type='document'
-            )
+            batch_docs = doc_encodings[i:i + batch_size].to(device)
+            doc_emb = model.get_embeddings(batch_docs, model_type='document')
             batch_similarities = torch.matmul(query_emb, doc_emb.t()).cpu().numpy().flatten()
             all_similarities.extend(batch_similarities)
             
-        # Find top k matches
         similarities = torch.tensor(all_similarities)
         top_idx = torch.topk(similarities, k=top_k, largest=True).indices
-        return [(documents[i], similarities[i].item()) for i in top_idx] 
+        return [(documents[i], similarities[i].item()) for i in top_idx]
