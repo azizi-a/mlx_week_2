@@ -1,9 +1,10 @@
 import torch
 import wandb
-from train import train_model
+from train_model import train_model
 from inference import search
 from data.data_loader import load_sample_data, flatten_queries_and_documents
 from pathlib import Path
+from utils.text_processor import TextProcessor
 
 def main():
     # Configuration
@@ -19,7 +20,7 @@ def main():
         # Word2Vec configuration
         'word2vec': {
             'window': 5,
-            'min_count': 4,
+            'min_count': 5,
             'workers': 4,
             'epochs': 5
         }
@@ -43,6 +44,8 @@ def main():
         project="two_tower_search",
         config=config
     )
+    processor = TextProcessor(vector_size=config['embed_dim'], word2vec_params=config['word2vec'])
+    processor.build_vocab(train_data['documents'] + train_data['queries'], use_text8=True)
     model, processor = train_model( 
         train_data,
         val_data,
