@@ -17,6 +17,7 @@ def main():
         'margin': 0.3,
         'num_negative_examples': 3,
         'sample_size': 150_000,
+        'top_k': 5,
         # Word2Vec configuration
         'word2vec': {
             'window': 5,
@@ -69,8 +70,8 @@ def main():
 
     for query in test_queries:
         print(f"\nQuery: {query}")
-        results = search(model, processor, query, train_data['documents'], top_k=5, device=device)
-        print("Top 2 matching documents:")
+        results = search(model, processor, query, train_data['documents'], top_k=config['top_k'], device=device)
+        print(f"Top {config['top_k']} matching documents:")
         for doc, score in results:
             doc_preview = ' '.join(doc.split()[:20])
             print('-'*100)
