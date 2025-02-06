@@ -44,7 +44,7 @@ def flatten_queries_and_documents(dataset):
     Returns:
         queries: List of query strings
         documents: List of document strings
-        labels: List of binary labels indicating if document matches query
+        labels: List of binary labels indicating if document is the best match for query
     """
     flat_queries = []
     flat_documents = []

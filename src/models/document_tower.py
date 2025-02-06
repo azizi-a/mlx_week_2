@@ -16,6 +16,21 @@ class DocumentTower(nn.Module):
         self.fc2 = nn.Linear(hidden_dim, hidden_dim)
         self.dropout = nn.Dropout(0.2)
         self.relu = nn.ReLU()
+        
+        # Initialize LSTM
+        for name, param in self.lstm.named_parameters():
+            if 'weight' in name:
+                nn.init.orthogonal_(param)
+            elif 'bias' in name:
+                nn.init.constant_(param, 0.0)
+                # Set forget gate bias to 1.0 (helps with gradient flow)
+                param.data[hidden_dim:2*hidden_dim] = 1.0
+        
+        # Initialize linear layers with Kaiming initialization
+        nn.init.kaiming_normal_(self.fc1.weight, nonlinearity='relu')
+        nn.init.constant_(self.fc1.bias, 0.0)
+        nn.init.kaiming_normal_(self.fc2.weight, nonlinearity='relu')
+        nn.init.constant_(self.fc2.bias, 0.0)
     
     def forward(self, x):
         x = self.embedding(x)
