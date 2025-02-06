@@ -3,7 +3,6 @@ import wandb
 from torch.utils.data import DataLoader
 from models.two_tower_model import TwoTowerModel
 from utils.text_processor import TextProcessor
-from data.data_loader import TextMatchingDataset
 from tqdm import tqdm
 
 def triplet_loss_function(query_embedding, positive_doc_embedding, negative_doc_embedding, margin):
@@ -78,10 +77,14 @@ def train_epoch(model, train_loader, train_doc_embeddings, optimizer, config, de
         loss.backward()
         optimizer.step()
         total_train_loss += loss.item()
-        train_pbar.set_postfix({'loss': f'{loss.item():.4f}'})
+        current_avg_loss = total_train_loss / (batch_idx + 1)  # Calculate running average
+        train_pbar.set_postfix({'loss': f'{loss.item():.4f}', 'avg_loss': f'{current_avg_loss:.4f}'})
         
-        # Log batch loss to wandb
-        wandb.log({"batch_train_loss": loss.item()})
+        # Log detailed training metrics
+        wandb.log({
+            "batch_train_loss": loss.item(),
+            "running_avg_train_loss": current_avg_loss
+        })
     
     return total_train_loss / len(train_loader)
 
@@ -140,17 +143,39 @@ def compute_doc_embeddings(model, doc_sequences, batch_size, device):
     
     return torch.cat(embeddings_list, dim=0).to(device)
 
+def check_embedding_diversity(embeddings, threshold=0.9):
+    if len(embeddings) > 10_000:
+        return True
+        
+    # Compute pairwise similarities
+    similarities = torch.matmul(embeddings, embeddings.t())
+    # Get upper triangle without diagonal
+    upper_tri = torch.triu(similarities, diagonal=1)
+    # Count pairs that are too similar
+    too_similar_count = (upper_tri > threshold).sum().item()
+    total_pairs = (len(embeddings) * (len(embeddings) - 1)) // 2
+    
+    if too_similar_count > 0:
+        print(f"Warning: {too_similar_count}/{total_pairs} of document embedding pairs are too similar (>{threshold})")
+        return False
+    return True
 def train_model(train_data, val_data, config, device='cuda'):
     # Initialize processor and process data
     processor = TextProcessor(vector_size=config['embed_dim'], word2vec_params=config['word2vec'])
+    
+    # Build vocabulary
+    print("Building vocabulary...")
     processor.build_vocab(train_data['documents'] + train_data['queries'])
     
     # Get pretrained embeddings
     pretrained_embeddings = processor.get_embedding_weights()
     
-    # Process training and validation data
+    # Process training and validation data with caching
+    print("Processing training data...")
     train_doc_sequences = processor.encode_text(train_data['documents'])
     train_query_sequences = processor.encode_text(train_data['queries'])
+    
+    print("Processing validation data...")
     val_doc_sequences = processor.encode_text(val_data['documents'])
     val_query_sequences = processor.encode_text(val_data['queries'])
     
@@ -170,6 +195,11 @@ def train_model(train_data, val_data, config, device='cuda'):
         config['batch_size'],
         device
     )
+    
+    print(f"\n\ntrain_doc_embeddings: {train_doc_embeddings.shape}")
+    check_embedding_diversity(train_doc_embeddings)
+    print("---------------------------------------------------------\n")
+
     val_doc_embeddings = compute_doc_embeddings(
         model, 
         val_doc_sequences, 
@@ -203,12 +233,13 @@ def train_model(train_data, val_data, config, device='cuda'):
         # Validation phase
         avg_val_loss = validate(model, val_loader, val_doc_embeddings, config, device)
         
-        # Log epoch metrics to wandb
+        # Log epoch metrics together to wandb
         wandb.log({
             "epoch": epoch + 1,
-            "train_loss": avg_train_loss,
-            "val_loss": avg_val_loss
-        })
+            "epoch_train_loss": avg_train_loss,
+            "epoch_val_loss": avg_val_loss,
+            "epoch_loss_difference (train - val)": avg_train_loss - avg_val_loss
+        }, commit=True)
         
         print(f"\nEpoch {epoch+1}/{config['epochs']} Summary - "
               f"Train Loss: {avg_train_loss:.4f} - "
