@@ -1,6 +1,6 @@
 import torch
 
-def search(model, processor, query, documents, top_k=5, device='cuda', batch_size=1024):
+def search(model, processor, query, documents, top_k=5, device='cuda', batch_size=8192):
     """
     Search for the most similar documents to a query.
     
@@ -37,5 +37,5 @@ def search(model, processor, query, documents, top_k=5, device='cuda', batch_siz
             
         # Find top k matches
         similarities = torch.tensor(all_similarities)
-        top_idx = similarities.argsort()[-top_k:][::-1]
+        top_idx = torch.topk(similarities, k=top_k, largest=True).indices
         return [(documents[i], similarities[i].item()) for i in top_idx] 
