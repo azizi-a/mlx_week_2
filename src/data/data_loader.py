@@ -17,10 +17,15 @@ class TextMatchingDataset(torch.utils.data.Dataset):
             'label': self.labels[idx]
         } 
 
-def load_sample_data(sample_size):
-    """Load sample data from MS MARCO dataset."""
-    # Load MS MARCO dataset
-    ds = load_dataset("microsoft/ms_marco", "v1.1")
+def load_sample_data(sample_size, cache_dir="src/data/ms_marco_cache"):
+    """Load sample data from MS MARCO dataset with caching.
+    
+    Args:
+        sample_size: Number of samples to load from each split
+        cache_dir: Directory to store cached dataset
+    """
+    # Load MS MARCO dataset with caching enabled
+    ds = load_dataset("microsoft/ms_marco", "v1.1", cache_dir=cache_dir)
     
     train_data = ds['train']
     validation_data = ds['validation']
