@@ -18,6 +18,10 @@ class DocumentTower(nn.Module):
         self.fc = nn.Linear(hidden_dim, hidden_dim)
         self.dropout = nn.Dropout(0.2)
         
+        # Freeze all parameters
+        for param in self.parameters():
+            param.requires_grad = False
+        
     def forward(self, x):
         lengths = (x != 0).sum(dim=1).cpu()
         
