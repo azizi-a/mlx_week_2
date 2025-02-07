@@ -15,7 +15,7 @@ def main():
         'epochs': 10,
         'learning_rate': 0.001,
         'margin': 0.3,
-        'num_negative_examples': 3,
+        'num_negative_examples': 10,
         'sample_size': 150_000,
         'top_k': 5,
         'num_workers': 4,
@@ -79,7 +79,7 @@ def main():
         "Tell me about AI and ML", 
         "What programming language should I learn?",
         train_data['queries'][0],
-        train_data['queries'][5],
+        train_data['queries'][15],
         train_data['queries'][47]
     ]
 
