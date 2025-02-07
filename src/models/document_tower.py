@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 class DocumentTower(nn.Module):
@@ -17,27 +18,23 @@ class DocumentTower(nn.Module):
         self.dropout = nn.Dropout(0.2)
         self.relu = nn.ReLU()
         
-        # Initialize LSTM
-        for name, param in self.lstm.named_parameters():
-            if 'weight' in name:
-                nn.init.orthogonal_(param)
-            elif 'bias' in name:
-                nn.init.constant_(param, 0.0)
-                # Set forget gate bias to 1.0 (helps with gradient flow)
-                param.data[hidden_dim:2*hidden_dim] = 1.0
-        
-        # Initialize linear layers with Kaiming initialization
-        nn.init.kaiming_normal_(self.fc1.weight, nonlinearity='relu')
-        nn.init.constant_(self.fc1.bias, 0.0)
-        nn.init.kaiming_normal_(self.fc2.weight, nonlinearity='relu')
-        nn.init.constant_(self.fc2.bias, 0.0)
     
     def forward(self, x):
+        lengths = (x != 0).sum(dim=1).cpu()
+
         x = self.embedding(x)
         x = self.dropout(x)
         
-        lstm_out, _ = self.lstm(x)
-        x = lstm_out[:, -1, :]
+        # Pack the padded sequence
+        packed_x = nn.utils.rnn.pack_padded_sequence(x, lengths.cpu(), 
+                                        batch_first=True, 
+                                        enforce_sorted=False)
+        # Process with LSTM
+        packed_lstm_out, _ = self.lstm(packed_x)
+        # Unpack the sequence
+        lstm_out, _ = nn.utils.rnn.pad_packed_sequence(packed_lstm_out, batch_first=True)
+        # Get the last non-padded output for each sequence
+        x = lstm_out[torch.arange(lstm_out.size(0)), lengths - 1]
         
         x = self.relu(self.fc1(x))
         x = self.dropout(x)
