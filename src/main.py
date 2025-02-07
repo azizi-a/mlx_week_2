@@ -18,6 +18,7 @@ def main():
         'num_negative_examples': 3,
         'sample_size': 150_000,
         'top_k': 5,
+        'num_workers': 4,
         # Word2Vec configuration
         'word2vec': {
             'window': 5,

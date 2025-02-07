@@ -224,13 +224,24 @@ def train_model(train_data, val_data, config, device='cuda'):
         train_query_sequences,
         torch.arange(len(train_query_sequences))  # indices for positive docs
     )
-    train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True)
+    train_loader = DataLoader(
+        train_dataset, 
+        batch_size=config['batch_size'], 
+        shuffle=True,
+        num_workers=config['num_workers'],
+        pin_memory=True
+    )
     
     val_dataset = torch.utils.data.TensorDataset(
         val_query_sequences,
         torch.arange(len(val_query_sequences))
     )
-    val_loader = DataLoader(val_dataset, batch_size=config['batch_size'])
+    val_loader = DataLoader(
+        val_dataset, 
+        batch_size=config['batch_size'],
+        num_workers=config['num_workers'],
+        pin_memory=True
+    )
     
     optimizer = torch.optim.Adam(model.parameters(), lr=config['learning_rate'])
     
