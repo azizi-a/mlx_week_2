@@ -54,8 +54,19 @@ def main():
         config, device
     )
 
-    # Save model and processor
+    # Save model to wandb
+    print('Saving...')
     save_dir = Path("saved_models")
+    model_path = save_dir / 'weights.pt'
+    torch.save(model.state_dict(), model_path)
+    print('Uploading...')
+    artifact = wandb.Artifact('model-weights', type='model')
+    artifact.add_file(model_path)
+    wandb.log_artifact(artifact)
+    print('Done!')
+    wandb.finish()
+
+    # Save model and processor to local directory
     save_dir.mkdir(exist_ok=True)
     torch.save(model.state_dict(), save_dir / "two_tower_model.pt")
     torch.save(processor, save_dir / "text_processor.pt")
@@ -65,8 +76,11 @@ def main():
     print("\nTesting search functionality:")
     test_queries = [
         "How do animals behave?",
-        "Tell me about AI and ML",
-        "What programming language should I learn?"
+        "Tell me about AI and ML", 
+        "What programming language should I learn?",
+        train_data['queries'][0],
+        train_data['queries'][5],
+        train_data['queries'][47]
     ]
 
     for query in test_queries:
@@ -77,8 +91,6 @@ def main():
             doc_preview = ' '.join(doc.split()[:20])
             print('-'*100)
             print(f"Score: {score:.4f} | Document: {doc_preview}...")
-
-    wandb.finish()
 
 if __name__ == "__main__":
     main() 
