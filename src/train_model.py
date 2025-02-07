@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 from models.two_tower_model import TwoTowerModel
 from utils.text_processor import TextProcessor
 from tqdm import tqdm
+import torch.nn as nn
 
 def triplet_loss_function(query_embedding, positive_doc_embedding, negative_doc_embedding, margin):
     """
@@ -159,6 +160,68 @@ def check_embedding_diversity(embeddings, threshold=0.9):
         print(f"Warning: {too_similar_count}/{total_pairs} of document embedding pairs are too similar (>{threshold})")
         return False
     return True
+
+def pretrain_document_tower(model, train_doc_sequences, batch_size, device):
+    """Pre-train document tower using reconstruction loss and batch similarity"""
+    print("Pre-training document tower...")
+    model.train()
+    optimizer = torch.optim.Adam(model.document_tower.parameters(), lr=0.001)
+    criterion = nn.MSELoss()
+    
+    # Create dataloader for documents - ensure batch_size is multiple of 10
+    adjusted_batch_size = (batch_size // 10) * 10
+    train_dataset = torch.utils.data.TensorDataset(train_doc_sequences)
+    train_loader = DataLoader(train_dataset, batch_size=adjusted_batch_size, shuffle=True)
+    
+    # Single epoch of training
+    total_loss = 0
+    train_pbar = tqdm(train_loader, desc='Pre-training document tower')
+    
+    for batch in train_pbar:
+        optimizer.zero_grad()
+        documents = batch[0].to(device)
+        
+        # Get document embeddings
+        doc_embeddings = model.document_tower(documents)
+        
+        # Ensure batch size is divisible by 10 before reshaping
+        batch_size = doc_embeddings.size(0)
+        if batch_size % 10 != 0:
+            # Truncate to nearest multiple of 10
+            doc_embeddings = doc_embeddings[:-(batch_size % 10)]
+        # Reshape embeddings to group similar documents (batch_size/10, 10, hidden_dim)
+        doc_embeddings = doc_embeddings.view(-1, 10, doc_embeddings.size(-1))
+        
+        # Calculate mean embedding for each group of 10
+        group_means = doc_embeddings.mean(dim=1, keepdim=True)
+        
+        # Loss is combination of:
+        # 1. Similarity within groups (documents should be close to their group mean)
+        # 2. Diversity between groups (group means should be different)
+        
+        # Within-group similarity loss
+        similarity_loss = criterion(doc_embeddings, group_means.expand(-1, 10, -1))
+        
+        # Between-group diversity loss (using cosine similarity)
+        group_means = group_means.squeeze(1)
+        group_means = torch.nn.functional.normalize(group_means, p=2, dim=1)
+        similarity_matrix = torch.matmul(group_means, group_means.t())
+        diversity_loss = torch.mean(torch.triu(similarity_matrix, diagonal=1))
+        
+        # Combined loss
+        loss = similarity_loss + 0.1 * diversity_loss
+        
+        loss.backward()
+        optimizer.step()
+        total_loss += loss.item()
+        train_pbar.set_postfix({
+            'loss': f'{loss.item():.4f}',
+            'sim_loss': f'{similarity_loss.item():.4f}',
+            'div_loss': f'{diversity_loss.item():.4f}'
+        })
+    
+    print(f"Document tower pre-training complete. Average loss: {total_loss/len(train_loader):.4f}")
+
 def train_model(train_data, val_data, config, device='cuda'):
     # Initialize processor and process data
     processor = TextProcessor(vector_size=config['embed_dim'], word2vec_params=config['word2vec'])
@@ -199,6 +262,12 @@ def train_model(train_data, val_data, config, device='cuda'):
         pretrained_embeddings=pretrained_embeddings
     ).to(device)
     
+    # Pre-train document tower
+    pretrain_document_tower(model, train_doc_sequences, config['batch_size'], device)
+
+    # Freeze document tower parameters
+    model.document_tower.freeze_parameters()
+
     # Pre-compute all document embeddings for both training and validation sets in batches
     print("Computing document embeddings...")
     train_doc_embeddings = compute_doc_embeddings(

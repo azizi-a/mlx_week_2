@@ -6,18 +6,18 @@ class DocumentTower(nn.Module):
                  pretrained_embeddings=None):
         super().__init__()
         
-        # Initialize embedding layer
         self.embedding = nn.Embedding(vocab_size, embed_dim)
         if pretrained_embeddings is not None:
             self.embedding.weight.data.copy_(pretrained_embeddings)
             
-        # Single-layer unidirectional LSTM
         self.lstm = nn.LSTM(embed_dim, hidden_dim, batch_first=True, 
                            bidirectional=False, num_layers=1)
-        # Single linear layer instead of two
         self.fc = nn.Linear(hidden_dim, hidden_dim)
-        self.dropout = nn.Dropout(0.2)
+        self.layer_norm = nn.LayerNorm(embed_dim)
+        self.dropout = nn.Dropout(0.3)
+        self.batch_norm = nn.BatchNorm1d(hidden_dim)
         
+    def freeze_parameters(self):
         # Freeze all parameters
         for param in self.parameters():
             param.requires_grad = False
@@ -26,6 +26,7 @@ class DocumentTower(nn.Module):
         lengths = (x != 0).sum(dim=1).cpu()
         
         x = self.embedding(x)
+        x = self.layer_norm(x)
         x = self.dropout(x)
         
         packed_x = nn.utils.rnn.pack_padded_sequence(x, lengths,
@@ -34,8 +35,8 @@ class DocumentTower(nn.Module):
         packed_lstm_out, _ = self.lstm(packed_x)
         lstm_out, _ = nn.utils.rnn.pad_packed_sequence(packed_lstm_out, batch_first=True)
         
-        # Get final hidden states
         x = lstm_out[torch.arange(lstm_out.size(0)), lengths - 1]
+        x = self.batch_norm(x)
         x = self.fc(x)
         
         return nn.functional.normalize(x, p=2, dim=1) 
