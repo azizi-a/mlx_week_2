@@ -7,11 +7,10 @@ from datetime import datetime
 from src.data.data_loader import load_sample_data, flatten_queries_and_documents
 from contextlib import asynccontextmanager
 
-
 # Add src directory to path to import local modules
 sys.path.append("src")
-from inference import search
-from models.two_tower_model import TwoTowerModel
+from src.inference import search
+from src.models.two_tower_model import TwoTowerModel
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -40,6 +39,17 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
     # Add cleanup code here if needed
+    
+# Write the model version here or find some way to derive it from the model
+# eg. from the model files name
+model_version = "0.1.0"
+
+# Set the log path.
+# This should be a directory that is writable by the application.
+# In a docker container, you can use /var/log/ as the directory.
+# Mount this directory to a volume on the host machine to persist the logs.
+log_dir_path = "/var/log/app"
+log_path = f"{log_dir_path}/V-{model_version}.log"
 
 app = FastAPI(title="Search API", lifespan=lifespan)
 
@@ -61,6 +71,15 @@ async def ping():
         "uptime": str(datetime.now() - start_time),
         "device": str(device)
     }
+
+@app.get("/version")
+def version():
+    return {"version": model_version}
+
+
+@app.get("/logs")
+def logs():
+    return read_logs(log_path)
 
 @app.post("/search")
 async def search_endpoint(request: SearchRequest):
@@ -86,6 +105,15 @@ async def search_endpoint(request: SearchRequest):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+def log_request(log_path, message):
+  # print the message and then write it to the log
+  pass
+
+
+def read_logs(log_path):
+  # read the logs from the log_path
+  pass
 
 if __name__ == "__main__":
     import uvicorn
